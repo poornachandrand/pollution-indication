@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AirNode USB — Air Quality Monitor</title>
+<style>
+:root {
+  --bg:#0d1117; --surface:#161b22; --surface2:#1f2937;
+  --border:#30363d; --text:#e6edf3; --muted:#7d8590;
+  --accent:#00d4aa; --accent2:#0ea5e9;
+  --green:#22c55e; --yellow:#eab308; --red:#ef4444;
+  --font-mono:'JetBrains Mono','Fira Code',monospace;
+  --font-body:system-ui,-apple-system,sans-serif;
+  --r:8px; --rl:14px;
+}
+.light{--bg:#f0f4f8;--surface:#fff;--surface2:#e8edf2;--border:#d1d9e0;--text:#1a2332;--muted:#64748b;}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;min-height:100vh;transition:background .3s,color .3s;}
+button{cursor:pointer;border:none;font-family:inherit;font-size:13px;border-radius:var(--r);transition:opacity .2s,transform .1s;}
+button:active{transform:scale(0.97);}
+input,select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:inherit;font-size:13px;padding:7px 10px;outline:none;}
+input:focus,select:focus{border-color:var(--accent);}
+
+/* Layout */
+.app{display:flex;flex-direction:column;min-height:100vh;}
+.topbar{display:flex;align-items:center;gap:10px;padding:0 20px;height:56px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;}
+.logo-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;}
+.spacer{flex:1;}
+.nav-tabs{display:flex;gap:4px;background:var(--surface2);border-radius:var(--r);padding:3px;}
+.nav-tab{padding:5px 14px;background:transparent;color:var(--muted);border-radius:6px;font-size:13px;font-weight:500;transition:all .2s;}
+.nav-tab.active{background:var(--surface);color:var(--text);}
+.btn-icon{width:34px;height:34px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:15px;position:relative;}
+.btn-icon.on{color:var(--accent);border-color:var(--accent);background:rgba(0,212,170,.1);}
+.btn-icon .badge-dot{position:absolute;top:-3px;right:-3px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface);display:none;}
+.btn-icon .badge-dot.show{display:block;}
+.btn-primary{background:var(--accent);color:#000;padding:7px 14px;font-weight:600;}
+.btn-primary:hover{opacity:.88;}
+.btn-secondary{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 14px;}
+.btn-secondary:hover{border-color:var(--accent);}
+.btn-danger{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:7px 14px;}
+.btn-warn{background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.3);color:var(--yellow);padding:7px 14px;}
+
+#mobileNav{display:none;}
+@media(max-width:768px){
+  .nav-tabs{display:none;}
+  #mobileNav{display:flex;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto;}
+  .main{padding:14px;}
+}
+.main{flex:1;padding:20px;max-width:1280px;margin:0 auto;width:100%;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* USB banner */
+.usb-banner{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);margin-bottom:20px;flex-wrap:wrap;}
+.usb-dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+.usb-dot.connected{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;}
+.usb-dot.searching{background:var(--yellow);animation:pulse .8s infinite;}
+.usb-dot.offline{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.usb-label{font-size:13px;font-weight:600;}
+.usb-sub{font-size:12px;color:var(--muted);}
+.last-upd{font-size:12px;color:var(--muted);margin-left:auto;}
+
+/* ═══ SAFETY LOCKOUT BANNER ═══ */
+.lockout-banner{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.88);flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;}
+.lockout-banner.show{display:flex;}
+.lockout-inner{background:var(--surface);border:2px solid var(--red);border-radius:20px;padding:40px 48px;max-width:520px;width:100%;animation:shakeIn .4s ease;}
+@keyframes shakeIn{0%{transform:scale(.8);}60%{transform:scale(1.04);}100%{transform:scale(1);}}
+.lockout-icon{font-size:72px;margin-bottom:16px;animation:throb 1s infinite;}
+@keyframes throb{0%,100%{transform:scale(1);}50%{transform:scale(1.12);}}
+.lockout-title{font-size:28px;font-weight:800;color:var(--red);margin-bottom:8px;}
+.lockout-sub{font-size:15px;color:var(--muted);margin-bottom:24px;line-height:1.7;}
+.lockout-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.btn-lockout-dismiss{background:rgba(239,68,68,.2);border:2px solid var(--red);color:var(--red);padding:10px 24px;font-weight:700;font-size:14px;}
+.btn-lockout-ack{background:var(--red);color:#fff;padding:10px 24px;font-weight:700;font-size:14px;}
+.lockout-checklist{text-align:left;background:var(--surface2);border-radius:10px;padding:16px 20px;margin:16px 0;}
+.lockout-checklist label{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:10px;cursor:pointer;}
+.lockout-checklist input[type=checkbox]{width:16px;height:16px;accent-color:var(--red);}
+.lockout-timer{font-size:13px;color:var(--muted);margin-top:12px;}
+.lockout-timer span{color:var(--red);font-weight:700;}
+
+/* Alert banner */
+.alert-banner{display:none;padding:12px 16px;border-radius:var(--r);margin-bottom:16px;font-weight:600;font-size:13px;align-items:center;gap:10px;flex-wrap:wrap;}
+.alert-banner.danger{display:flex;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--red);}
+.alert-banner.warning{display:flex;background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.4);color:var(--yellow);}
+.alert-banner-btns{display:flex;gap:8px;margin-left:auto;}
+.btn-alert-ack{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:rgba(255,255,255,.1);border:1px solid currentColor;color:inherit;}
+.btn-alert-sos{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:var(--red);border:1px solid var(--red);color:#fff;}
+
+/* Safety action panel */
+.safety-panel{background:var(--surface);border:2px solid rgba(239,68,68,.3);border-radius:var(--rl);padding:18px 20px;margin-bottom:20px;display:none;}
+.safety-panel.show{display:block;}
+.safety-panel-title{font-size:13px;font-weight:700;color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.8px;}
+.safety-actions-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;}
+.safety-action-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .2s;font-size:12px;font-weight:600;color:var(--text);}
+.safety-action-btn:hover{border-color:var(--red);background:rgba(239,68,68,.08);}
+.safety-action-btn.pressed{background:rgba(239,68,68,.15);border-color:var(--red);}
+.safety-action-btn .sab-icon{font-size:24px;}
+.safety-action-btn .sab-label{text-align:center;line-height:1.3;}
+.safety-action-btn .sab-state{font-size:11px;color:var(--muted);margin-top:2px;}
+
+/* Offline card */
+.offline-card{display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:48px 32px;text-align:center;margin-bottom:20px;}
+.offline-card.visible{display:block;}
+.offline-card h3{font-size:18px;margin-bottom:8px;}
+.offline-card p{color:var(--muted);max-width:460px;margin:0 auto 20px;line-height:1.7;}
+.steps-list{background:var(--surface2);border-radius:var(--r);padding:16px 20px;text-align:left;max-width:460px;margin:0 auto 24px;counter-reset:step;}
+.steps-list li{color:var(--muted);margin-bottom:10px;font-size:13px;list-style:none;counter-increment:step;padding-left:28px;position:relative;}
+.steps-list li::before{content:counter(step);position:absolute;left:0;width:20px;height:20px;background:var(--accent);color:#000;border-radius:50%;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.cmd-box{background:#0a0e13;border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;font-family:var(--font-mono);font-size:12px;color:#00d4aa;margin:8px auto;max-width:360px;text-align:left;}
+.retry-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+
+/* Cards */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:18px 20px;position:relative;overflow:hidden;transition:border-color .3s;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--card-accent,var(--accent));border-radius:var(--rl) var(--rl) 0 0;}
+.card.danger-glow{border-color:rgba(239,68,68,.5);box-shadow:0 0 16px rgba(239,68,68,.12);}
+.card.warn-glow{border-color:rgba(234,179,8,.4);box-shadow:0 0 16px rgba(234,179,8,.08);}
+.card-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px;}
+.card-value{font-size:36px;font-weight:700;line-height:1;margin-bottom:6px;letter-spacing:-1px;}
+.card-unit{font-size:16px;font-weight:400;color:var(--muted);}
+.card-sub{font-size:12px;color:var(--muted);}
+.card-icon{position:absolute;top:16px;right:18px;font-size:22px;opacity:.25;}
+.card-sparkline{width:100%;height:34px;display:block;margin-top:8px;opacity:.7;}
+.led-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+.led-badge.green{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3);}
+.led-badge.yellow{background:rgba(234,179,8,.15);color:var(--yellow);border:1px solid rgba(234,179,8,.3);}
+.led-badge.red{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3);}
+.led-dot{width:9px;height:9px;border-radius:50%;background:currentColor;}
+
+/* Stats strip */
+.stats-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px;}
+.stat-card-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px;}
+.stat-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;}
+.stat-val{font-weight:700;font-family:var(--font-mono);}
+
+/* Chart */
+.chart-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:18px 20px;margin-bottom:20px;}
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+.chart-title{font-size:14px;font-weight:600;}
+.chart-legend{display:flex;gap:16px;flex-wrap:wrap;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.legend-dot{width:10px;height:10px;border-radius:50%;}
+canvas#chart{width:100%;height:220px;display:block;}
+
+/* Alert Log */
+.alert-log-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:18px 20px;margin-bottom:20px;}
+.alert-log-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+.alert-log-title{font-size:14px;font-weight:600;}
+.alert-log-list{max-height:220px;overflow-y:auto;}
+.alert-log-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.alert-log-item:last-child{border-bottom:none;}
+.ali-icon{font-size:16px;flex-shrink:0;margin-top:1px;}
+.ali-msg{flex:1;line-height:1.5;}
+.ali-time{font-size:11px;color:var(--muted);font-family:var(--font-mono);white-space:nowrap;}
+.ali-level-danger{color:var(--red);}
+.ali-level-warning{color:var(--yellow);}
+.ali-level-ack{color:var(--muted);text-decoration:line-through;}
+
+/* Table */
+.table-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:18px 20px;margin-bottom:20px;overflow-x:auto;}
+.table-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border);}
+td{padding:9px 12px;font-size:13px;border-bottom:1px solid var(--border);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--surface2);}
+.quality-chip{display:inline-flex;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;}
+.quality-good{background:rgba(34,197,94,.15);color:var(--green);}
+.quality-moderate{background:rgba(234,179,8,.15);color:var(--yellow);}
+.quality-poor{background:rgba(239,68,68,.15);color:var(--red);}
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
+.empty-state{text-align:center;padding:40px;color:var(--muted);font-size:13px;}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red);border-color:rgba(239,68,68,.3);}
+
+/* Settings */
+.section-title{font-size:16px;font-weight:700;margin-bottom:16px;}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;}
+.settings-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:20px;}
+.settings-card h3{font-size:14px;font-weight:600;margin-bottom:16px;}
+.field-row{margin-bottom:14px;}
+.field-label{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}
+.field-row input,.field-row select{width:100%;}
+.field-hint{font-size:11px;color:var(--muted);margin-top:4px;}
+.settings-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.toggle-row:last-child{border-bottom:none;}
+.toggle-label{font-size:13px;}
+.toggle-sub{font-size:11px;color:var(--muted);}
+.toggle-switch{width:40px;height:22px;background:var(--border);border-radius:11px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;}
+.toggle-switch.on{background:var(--accent);}
+.toggle-switch::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s;}
+.toggle-switch.on::after{left:21px;}
+
+/* Guide */
+.guide-layout{display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:start;}
+@media(max-width:768px){.guide-layout{grid-template-columns:1fr;}}
+.guide-toc{position:sticky;top:76px;background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:16px;}
+.guide-toc h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:12px;}
+.toc-link{display:block;padding:7px 10px;border-radius:var(--r);color:var(--muted);font-size:13px;margin-bottom:2px;transition:all .2s;text-decoration:none;}
+.toc-link:hover{background:var(--surface2);color:var(--text);}
+.guide-content section{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:28px;margin-bottom:20px;scroll-margin-top:80px;}
+.guide-content h2{font-size:20px;font-weight:700;margin-bottom:16px;}
+.guide-content h3{font-size:15px;font-weight:600;margin:20px 0 10px;}
+.guide-content p{color:var(--muted);margin-bottom:12px;line-height:1.8;}
+.guide-content ul,.guide-content ol{color:var(--muted);padding-left:20px;margin-bottom:12px;}
+.guide-content li{margin-bottom:6px;line-height:1.7;}
+.guide-content strong{color:var(--text);font-weight:600;}
+.code-block{background:#0a0e13;border:1px solid var(--border);border-radius:var(--r);padding:16px;margin:12px 0;overflow-x:auto;position:relative;}
+.code-block pre{font-family:var(--font-mono);font-size:12px;line-height:1.7;color:#a8b9cc;white-space:pre;}
+.code-copy{position:absolute;top:8px;right:8px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:4px 10px;font-size:11px;border-radius:5px;cursor:pointer;}
+.tip-box{display:flex;gap:10px;background:rgba(0,212,170,.07);border:1px solid rgba(0,212,170,.25);border-radius:var(--r);padding:12px 14px;margin:12px 0;font-size:13px;color:var(--muted);}
+.warn-box{display:flex;gap:10px;background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.25);border-radius:var(--r);padding:12px 14px;margin:12px 0;font-size:13px;color:var(--muted);}
+.wiring-table{width:100%;border-collapse:collapse;margin:12px 0;}
+.wiring-table th{background:var(--surface2);font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);padding:8px 12px;}
+.wiring-table td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;}
+.wiring-table td:first-child{font-family:var(--font-mono);color:var(--accent);}
+.trouble-item{border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden;}
+.trouble-q{padding:12px 16px;background:var(--surface2);font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
+.trouble-q:hover{background:var(--border);}
+.trouble-a{padding:0 16px;max-height:0;overflow:hidden;transition:max-height .3s,padding .3s;font-size:13px;color:var(--muted);line-height:1.7;}
+.trouble-a.open{max-height:400px;padding:12px 16px;}
+.chevron{transition:transform .3s;font-size:12px;}
+.trouble-q.open .chevron{transform:rotate(180deg);}
+
+/* SOS Pulse for full-danger */
+@keyframes sosPulse{0%,100%{box-shadow:0 0 0 rgba(239,68,68,.0);}50%{box-shadow:0 0 32px rgba(239,68,68,.45);}}
+.sos-active{animation:sosPulse 1s infinite;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ══ DANGER LOCKOUT OVERLAY ══════════════════════════════════ -->
+  <div class="lockout-banner" id="lockoutBanner">
+    <div class="lockout-inner" id="lockoutInner">
+      <div class="lockout-icon">🚨</div>
+      <div class="lockout-title">CRITICAL AIR QUALITY ALERT</div>
+      <div class="lockout-sub" id="lockoutMsg">Air quality has reached a dangerous level. Immediate action required. Confirm the steps below before dismissing.</div>
+      <div class="lockout-checklist" id="lockoutChecklist">
+        <label><input type="checkbox" id="lc1" onchange="updateLockoutBtn()"> Open all windows and doors immediately</label>
+        <label><input type="checkbox" id="lc2" onchange="updateLockoutBtn()"> Turn on fans / ventilation systems</label>
+        <label><input type="checkbox" id="lc3" onchange="updateLockoutBtn()"> Move people away from affected area</label>
+        <label><input type="checkbox" id="lc4" onchange="updateLockoutBtn()"> Identify and eliminate the source if safe to do so</label>
+      </div>
+      <div class="lockout-timer" id="lockoutTimer">Auto-dismiss in <span id="lockoutCountdown">30</span>s — or acknowledge all steps</div>
+      <div class="lockout-actions">
+        <button class="btn-lockout-dismiss" onclick="dismissLockout(false)">Dismiss (risk accepted)</button>
+        <button class="btn-lockout-ack" id="lockoutAckBtn" disabled onclick="dismissLockout(true)">✓ Acknowledged — all steps done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TOPBAR ═══════════════════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-icon">🌿</div>
+      <span>AirNode <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:4px">USB</span></span>
+    </div>
+    <nav class="nav-tabs">
+      <button class="nav-tab active" onclick="showPage('dashboard',this)">Dashboard</button>
+      <button class="nav-tab" onclick="showPage('history',this)">History</button>
+      <button class="nav-tab" onclick="showPage('alerts',this)">Alert Log <span id="alertLogBadge" class="badge badge-red" style="display:none;margin-left:4px">0</span></button>
+      <button class="nav-tab" onclick="showPage('settings',this)">Settings</button>
+      <button class="nav-tab" onclick="showPage('guide',this)">Setup Guide</button>
+    </nav>
+    <div class="spacer"></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn-icon" id="soundBtn" title="Toggle alert sounds (off)" onclick="toggleSound()" style="font-size:17px">🔇</button>
+      <button class="btn-icon" id="notifBtn" title="Enable notifications" onclick="requestNotifs()" style="font-size:17px">🔔<span class="badge-dot" id="notifDot"></span></button>
+      <button class="btn-icon" title="Export CSV" onclick="exportCSV()" style="font-size:17px">⬇</button>
+      <button class="btn-icon" title="Toggle theme" onclick="toggleTheme()" id="themeBtn" style="font-size:17px">☀</button>
+    </div>
+  </header>
+
+  <div id="mobileNav">
+    <button class="nav-tab active" style="flex:1;border-radius:0;padding:10px 4px;font-size:11px" onclick="showPage('dashboard',this)">📊 Live</button>
+    <button class="nav-tab" style="flex:1;border-radius:0;padding:10px 4px;font-size:11px" onclick="showPage('history',this)">📋 History</button>
+    <button class="nav-tab" style="flex:1;border-radius:0;padding:10px 4px;font-size:11px" onclick="showPage('alerts',this)">🚨 Alerts</button>
+    <button class="nav-tab" style="flex:1;border-radius:0;padding:10px 4px;font-size:11px" onclick="showPage('settings',this)">⚙ Settings</button>
+    <button class="nav-tab" style="flex:1;border-radius:0;padding:10px 4px;font-size:11px" onclick="showPage('guide',this)">📖 Guide</button>
+  </div>
+
+  <main class="main">
+
+    <!-- ══ DASHBOARD ════════════════════════════════════════════ -->
+    <div class="page active" id="page-dashboard">
+
+      <!-- USB status -->
+      <div class="usb-banner">
+        <div class="usb-dot" id="usbDot"></div>
+        <div>
+          <div class="usb-label" id="usbLabel">Connecting to bridge…</div>
+          <div class="usb-sub" id="usbSub">http://localhost:8080/data</div>
+        </div>
+        <span class="last-upd" id="lastUpd"></span>
+      </div>
+
+      <!-- Inline alert banner with action buttons -->
+      <div class="alert-banner" id="alertBanner">
+        <span id="alertIcon">🚨</span>
+        <span id="alertMsg"></span>
+        <div class="alert-banner-btns">
+          <button class="btn-alert-ack" onclick="acknowledgeAlert()">Acknowledge</button>
+          <button class="btn-alert-sos" onclick="triggerSOS()">🆘 SOS Actions</button>
+        </div>
+      </div>
+
+      <!-- Safety action panel (shows on danger/warning) -->
+      <div class="safety-panel" id="safetyPanel">
+        <div class="safety-panel-title">⚠ Recommended Safety Actions</div>
+        <div class="safety-actions-grid">
+          <button class="safety-action-btn" id="sab-ventilate" onclick="safetyAction(this,'ventilate')">
+            <span class="sab-icon">🪟</span>
+            <span class="sab-label">Open Windows</span>
+            <span class="sab-state">Not done</span>
+          </button>
+          <button class="safety-action-btn" id="sab-fans" onclick="safetyAction(this,'fans')">
+            <span class="sab-icon">🌀</span>
+            <span class="sab-label">Turn On Fans</span>
+            <span class="sab-state">Not done</span>
+          </button>
+          <button class="safety-action-btn" id="sab-evacuate" onclick="safetyAction(this,'evacuate')">
+            <span class="sab-icon">🚶</span>
+            <span class="sab-label">Evacuate Area</span>
+            <span class="sab-state">Not done</span>
+          </button>
+          <button class="safety-action-btn" id="sab-source" onclick="safetyAction(this,'source')">
+            <span class="sab-icon">🔍</span>
+            <span class="sab-label">Check Source</span>
+            <span class="sab-state">Not done</span>
+          </button>
+          <button class="safety-action-btn" id="sab-call" onclick="safetyAction(this,'call')">
+            <span class="sab-icon">📞</span>
+            <span class="sab-label">Call Help</span>
+            <span class="sab-state">Not done</span>
+          </button>
+          <button class="safety-action-btn" onclick="resetSafetyActions()">
+            <span class="sab-icon">↺</span>
+            <span class="sab-label">Reset Actions</span>
+            <span class="sab-state" style="color:var(--accent)">clear all</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Offline card -->
+      <div class="offline-card" id="offlineCard">
+        <div style="font-size:48px;margin-bottom:16px;opacity:.5">🔌</div>
+        <h3>Bridge not running</h3>
+        <p>The Python bridge is not detected at <strong style="font-family:var(--font-mono)">localhost:8080</strong>. Start it on your PC first:</p>
+        <ol class="steps-list">
+          <li>Install pyserial if not done yet:<div class="cmd-box">pip install pyserial</div></li>
+          <li>Plug Arduino Uno into PC via USB</li>
+          <li>Run the bridge script:<div class="cmd-box">python airnode_bridge.py</div></li>
+          <li>Come back here — dashboard auto-connects</li>
+        </ol>
+        <div class="retry-row">
+          <button class="btn-secondary" onclick="enableDemo()">Demo mode</button>
+          <button class="btn-primary" onclick="fetchData()">Retry now</button>
+        </div>
+      </div>
+
+      <!-- Metric cards -->
+      <div class="cards-grid" id="cardsGrid" style="display:none">
+        <div class="card" id="card-temp" style="--card-accent:#0ea5e9">
+          <div class="card-icon">🌡</div>
+          <div class="card-label">Temperature</div>
+          <div class="card-value" id="cardTemp">—<span class="card-unit">°C</span></div>
+          <div class="card-sub" id="cardTempF">—</div>
+          <canvas class="card-sparkline" id="sparkTemp"></canvas>
+        </div>
+        <div class="card" id="card-hum" style="--card-accent:#22c55e">
+          <div class="card-icon">💧</div>
+          <div class="card-label">Humidity</div>
+          <div class="card-value" id="cardHum">—<span class="card-unit">%</span></div>
+          <div class="card-sub" id="cardHumSub">—</div>
+          <canvas class="card-sparkline" id="sparkHum"></canvas>
+        </div>
+        <div class="card" id="card-aq" style="--card-accent:#f97316">
+          <div class="card-icon">🌫</div>
+          <div class="card-label">Air Quality (MQ135)</div>
+          <div class="card-value" id="cardAQ">—</div>
+          <div class="card-sub" id="cardAQLabel">raw ADC reading</div>
+          <canvas class="card-sparkline" id="sparkAQ"></canvas>
+        </div>
+        <div class="card" id="card-alert" style="--card-accent:#a78bfa">
+          <div class="card-icon">🔔</div>
+          <div class="card-label">Alert State</div>
+          <div style="margin-top:8px">
+            <div class="led-badge" id="ledBadge"><span class="led-dot"></span><span id="ledLabel">—</span></div>
+          </div>
+          <div class="card-sub" id="ledSub" style="margin-top:6px">waiting for data</div>
+          <div style="margin-top:10px;font-size:11px;color:var(--muted)">Total alerts: <strong id="alertTotalCount" style="color:var(--text)">0</strong></div>
+        </div>
+      </div>
+
+      <!-- Stats strip -->
+      <div class="stats-strip" id="statsStrip" style="display:none">
+        <div class="stat-card">
+          <div class="stat-card-title">🌡 Temp Range</div>
+          <div class="stat-row"><span class="stat-label">Min</span><span class="stat-val" id="statTempMin">—</span></div>
+          <div class="stat-row"><span class="stat-label">Max</span><span class="stat-val" id="statTempMax">—</span></div>
+          <div class="stat-row"><span class="stat-label">Avg</span><span class="stat-val" id="statTempAvg">—</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">💧 Humidity Range</div>
+          <div class="stat-row"><span class="stat-label">Min</span><span class="stat-val" id="statHumMin">—</span></div>
+          <div class="stat-row"><span class="stat-label">Max</span><span class="stat-val" id="statHumMax">—</span></div>
+          <div class="stat-row"><span class="stat-label">Avg</span><span class="stat-val" id="statHumAvg">—</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">🌫 Air Quality Range</div>
+          <div class="stat-row"><span class="stat-label">Min</span><span class="stat-val" id="statAQMin">—</span></div>
+          <div class="stat-row"><span class="stat-label">Max</span><span class="stat-val" id="statAQMax">—</span></div>
+          <div class="stat-row"><span class="stat-label">Avg</span><span class="stat-val" id="statAQAvg">—</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">📊 Session</div>
+          <div class="stat-row"><span class="stat-label">Readings</span><span class="stat-val" id="statReadings">0</span></div>
+          <div class="stat-row"><span class="stat-label">Alerts fired</span><span class="stat-val" style="color:var(--red)" id="statAlerts">0</span></div>
+          <div class="stat-row"><span class="stat-label">Uptime</span><span class="stat-val" id="statUptime">0m</span></div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-section">
+        <div class="chart-header">
+          <span class="chart-title">Last 60 readings</span>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#0ea5e9"></div>Temp °C</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Humidity %</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>Air quality</div>
+          </div>
+        </div>
+        <canvas id="chart"></canvas>
+        <div id="chartEmpty" class="empty-state">Waiting for data…</div>
+      </div>
+    </div>
+
+    <!-- ══ HISTORY ═══════════════════════════════════════════════ -->
+    <div class="page" id="page-history">
+      <div class="table-section">
+        <div class="table-header">
+          <span style="font-size:14px;font-weight:600">Session readings</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span class="badge" id="readingCount">0 readings</span>
+            <button class="btn-secondary" onclick="exportCSV()">⬇ Export CSV</button>
+            <button class="btn-danger" onclick="clearHistory()">Clear</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Time</th><th>Temp °C</th><th>Humidity %</th><th>Air quality</th><th>Quality</th><th>Alert</th></tr></thead>
+          <tbody id="historyBody"><tr><td colspan="6" class="empty-state">No readings yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ ALERT LOG ═════════════════════════════════════════════ -->
+    <div class="page" id="page-alerts">
+      <div class="alert-log-section">
+        <div class="alert-log-header">
+          <span class="alert-log-title">🚨 Alert Log</span>
+          <div style="display:flex;gap:8px">
+            <span class="badge badge-red" id="alertLogTotal">0 alerts</span>
+            <button class="btn-secondary" onclick="clearAlertLog()">Clear log</button>
+            <button class="btn-primary" onclick="markAllAcked()">Mark all acknowledged</button>
+          </div>
+        </div>
+        <div class="alert-log-list" id="alertLogList">
+          <div class="empty-state">No alerts fired yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ══════════════════════════════════════════════ -->
+    <div class="page" id="page-settings">
+      <div class="section-title">Settings</div>
+      <div class="settings-grid">
+
+        <div class="settings-card">
+          <h3>⏱ Polling</h3>
+          <div class="field-row">
+            <label class="field-label">Poll interval</label>
+            <select id="settingsInterval">
+              <option value="1000">1 second</option>
+              <option value="2000">2 seconds</option>
+              <option value="3000" selected>3 seconds</option>
+              <option value="5000">5 seconds</option>
+            </select>
+          </div>
+          <div class="settings-actions"><button class="btn-primary" onclick="applySettings()">Apply</button></div>
+        </div>
+
+        <div class="settings-card">
+          <h3>🌫 Air quality thresholds</h3>
+          <div class="field-row">
+            <label class="field-label">Moderate (MQ135 raw)</label>
+            <input type="number" id="threshModerate" value="300" min="0" max="1023"/>
+            <div class="field-hint">Above this → Moderate warning</div>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Poor / Danger (MQ135 raw)</label>
+            <input type="number" id="threshPoor" value="600" min="0" max="1023"/>
+            <div class="field-hint">Above this → Poor + lockout alert</div>
+          </div>
+          <div class="settings-actions"><button class="btn-primary" onclick="applySettings()">Save</button></div>
+        </div>
+
+        <div class="settings-card">
+          <h3>🛡 Safety &amp; Alerts</h3>
+          <div class="toggle-row">
+            <div><div class="toggle-label">Alert sounds</div><div class="toggle-sub">Beep on warning / danger</div></div>
+            <div class="toggle-switch" id="ts-sound" onclick="toggleSoundSetting()"></div>
+          </div>
+          <div class="toggle-row">
+            <div><div class="toggle-label">Browser notifications</div><div class="toggle-sub">Push alerts even when minimized</div></div>
+            <div class="toggle-switch" id="ts-notif" onclick="requestNotifs()"></div>
+          </div>
+          <div class="toggle-row">
+            <div><div class="toggle-label">Danger lockout overlay</div><div class="toggle-sub">Full-screen overlay on poor air</div></div>
+            <div class="toggle-switch on" id="ts-lockout" onclick="toggleLockoutSetting()"></div>
+          </div>
+          <div class="toggle-row">
+            <div><div class="toggle-label">Safety action panel</div><div class="toggle-sub">Show action checklist on alert</div></div>
+            <div class="toggle-switch on" id="ts-panel" onclick="togglePanelSetting()"></div>
+          </div>
+          <div class="field-row" style="margin-top:14px">
+            <label class="field-label">Lockout cooldown (minutes)</label>
+            <input type="number" id="lockoutCooldown" value="5" min="1" max="60"/>
+            <div class="field-hint">Minimum gap between lockout alerts</div>
+          </div>
+          <div class="settings-actions">
+            <button class="btn-primary" onclick="applySettings()">Save safety settings</button>
+            <button class="btn-warn" onclick="testAlert()">🧪 Test Alert</button>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>🎨 Interface</h3>
+          <div class="field-row">
+            <label class="field-label">Theme</label>
+            <select id="settingsTheme" onchange="setTheme(this.value)">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+          <div class="settings-actions"><button class="btn-primary" onclick="applySettings()">Apply</button></div>
+        </div>
+
+        <div class="settings-card">
+          <h3>🔌 Bridge URL</h3>
+          <div class="field-row">
+            <label class="field-label">Python bridge address</label>
+            <input type="text" id="bridgeUrl" value="http://localhost:8080" style="font-family:var(--font-mono)"/>
+            <div class="field-hint">Change only if running bridge on another machine</div>
+          </div>
+          <div class="settings-actions"><button class="btn-primary" onclick="applySettings()">Save &amp; reconnect</button></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ══ SETUP GUIDE ════════════════════════════════════════════ -->
+    <div class="page" id="page-guide">
+      <div class="guide-layout">
+        <nav class="guide-toc">
+          <h4>Contents</h4>
+          <a class="toc-link" href="#g-how">How it works</a>
+          <a class="toc-link" href="#g-wiring">Wiring</a>
+          <a class="toc-link" href="#g-python">Install Python</a>
+          <a class="toc-link" href="#g-uno">Uno sketch</a>
+          <a class="toc-link" href="#g-bridge">Run bridge</a>
+          <a class="toc-link" href="#g-open">Open dashboard</a>
+          <a class="toc-link" href="#g-safety">Safety features</a>
+          <a class="toc-link" href="#g-trouble">Troubleshooting</a>
+        </nav>
+        <div class="guide-content">
+
+          <section id="g-how">
+            <h2>⚡ How USB mode works</h2>
+            <p>No WiFi, no NodeMCU needed. The Arduino Uno plugs directly into your PC via USB. A small Python script reads the serial data and serves it as a local web API on <strong>localhost:8080</strong>. This dashboard fetches from that address.</p>
+            <div class="tip-box"><span>💡</span> Everything runs on your PC — no internet, no router, no second board.</div>
+            <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:8px;align-items:center;margin:16px 0;">
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px;text-align:center;font-size:12px;font-weight:600">Arduino Uno<br><span style="color:var(--muted);font-weight:400">reads sensors</span></div>
+              <div style="color:var(--accent);font-size:18px;font-weight:700">→</div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px;text-align:center;font-size:12px;font-weight:600">Python bridge<br><span style="color:var(--muted);font-weight:400">reads USB serial</span></div>
+              <div style="color:var(--accent);font-size:18px;font-weight:700">→</div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px;text-align:center;font-size:12px;font-weight:600">Dashboard<br><span style="color:var(--muted);font-weight:400">localhost:8080</span></div>
+            </div>
+          </section>
+
+          <section id="g-wiring">
+            <h2>🔌 Wiring (Uno only)</h2>
+            <p>No jumper wires to another board. Just sensors and outputs to the Uno.</p>
+            <table class="wiring-table">
+              <tr><th>Component</th><th>Uno pin</th><th>Notes</th></tr>
+              <tr><td>DHT11 DATA</td><td>D7</td><td>+ 10kΩ pull-up to 5V</td></tr>
+              <tr><td>DHT11 VCC</td><td>5V</td><td></td></tr>
+              <tr><td>DHT11 GND</td><td>GND</td><td></td></tr>
+              <tr><td>MQ135 AOUT</td><td>A0</td><td>Analog output</td></tr>
+              <tr><td>MQ135 VCC</td><td>5V</td><td></td></tr>
+              <tr><td>MQ135 GND</td><td>GND</td><td></td></tr>
+              <tr><td>Green LED anode</td><td>D4</td><td>Via 220Ω resistor</td></tr>
+              <tr><td>Yellow LED anode</td><td>D5</td><td>Via 220Ω resistor</td></tr>
+              <tr><td>Red LED anode</td><td>D6</td><td>Via 220Ω resistor</td></tr>
+              <tr><td>Buzzer (+)</td><td>D9</td><td>(–) to GND</td></tr>
+            </table>
+          </section>
+
+          <section id="g-python">
+            <h2>🐍 Install Python &amp; pyserial</h2>
+            <p>You need Python 3 and the pyserial library. Open a terminal (Command Prompt on Windows) and run:</p>
+            <div class="code-block"><button class="code-copy" onclick="copyText('pip install pyserial')">Copy</button><pre>pip install pyserial</pre></div>
+          </section>
+
+          <section id="g-uno">
+            <h2>1️⃣ Arduino Uno sketch</h2>
+            <p>Upload <strong>AirNode_Uno_USB.ino</strong> to the Uno. Select board: Arduino Uno, correct COM port, then Upload.</p>
+            <div class="code-block"><pre>AIRNODE_START
+24.00,61.00,342,green
+24.00,61.00,338,green</pre></div>
+            <div class="warn-box"><span>⚠️</span> Close Serial Monitor before running the Python bridge.</div>
+          </section>
+
+          <section id="g-bridge">
+            <h2>2️⃣ Run the Python bridge</h2>
+            <p>Close Arduino Serial Monitor. Then in a terminal run:</p>
+            <div class="code-block"><button class="code-copy" onclick="copyText('python airnode_bridge.py')">Copy</button><pre>python airnode_bridge.py</pre></div>
+            <div class="tip-box"><span>💡</span> Leave this terminal open — it must keep running while you use the dashboard.</div>
+          </section>
+
+          <section id="g-open">
+            <h2>3️⃣ Open the dashboard</h2>
+            <p>Open this HTML file in Chrome, Firefox, or Edge. The dashboard auto-connects to <strong>localhost:8080</strong>. The status dot turns green within a few seconds.</p>
+          </section>
+
+          <section id="g-safety">
+            <h2>🛡 Safety Features</h2>
+            <h3>Danger Lockout Overlay</h3>
+            <p>When air quality exceeds the <strong>Poor</strong> threshold, a full-screen overlay blocks the UI and requires you to confirm safety steps before dismissing. A 30-second auto-dismiss countdown runs in parallel. You can disable this in <strong>Settings → Safety &amp; Alerts</strong>.</p>
+            <h3>Safety Action Panel</h3>
+            <p>On any warning or danger reading, a panel appears beneath the alert banner with six action buttons: open windows, turn on fans, evacuate, check source, call help, and reset. Each button toggles to a "done" state so you can track what you've handled.</p>
+            <h3>Alert Log</h3>
+            <p>Every alert (warning or danger) is recorded in the <strong>Alert Log</strong> tab with a timestamp and reading value. Alerts can be individually acknowledged or bulk-cleared. The topbar badge shows unacknowledged alert count.</p>
+            <h3>SOS Quick-Action Button</h3>
+            <p>The <strong>🆘 SOS Actions</strong> button in the inline alert banner immediately shows the danger lockout overlay with its full checklist.</p>
+            <h3>Audio Alerts</h3>
+            <p>Toggle the 🔇 button in the topbar to enable sound. A short beep plays on moderate alerts; a longer pattern plays on danger. Requires a browser interaction first (browser policy).</p>
+            <h3>Browser Notifications</h3>
+            <p>Click 🔔 in the topbar to enable browser push notifications. Alerts will show even if the dashboard tab is minimized.</p>
+            <div class="warn-box"><span>⚠️</span> These are dashboard-only safety features. For life-safety applications always install dedicated gas detectors and follow local fire safety codes.</div>
+          </section>
+
+          <section id="g-trouble">
+            <h2>🔧 Troubleshooting</h2>
+            <div class="trouble-item">
+              <div class="trouble-q" onclick="toggleT(this)">Bridge says "No serial port found" <span class="chevron">▼</span></div>
+              <div class="trouble-a">Plug the Uno into the PC first, then run the bridge. Set <code>SERIAL_PORT = "COM3"</code> (Windows) or <code>"/dev/ttyUSB0"</code> (Linux/Mac) manually if auto-detect fails.</div>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-q" onclick="toggleT(this)">Dashboard shows "Bridge not running" <span class="chevron">▼</span></div>
+              <div class="trouble-a">The Python bridge must be running in a terminal. If it crashed, re-run <code>python airnode_bridge.py</code>. Check no firewall is blocking localhost:8080.</div>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-q" onclick="toggleT(this)">Bridge runs but shows garbled data <span class="chevron">▼</span></div>
+              <div class="trouble-a">Baud rate mismatch. The Uno sketch sends at 9600. The bridge listens at 9600. Change both to match.</div>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-q" onclick="toggleT(this)">Serial port in use / access denied <span class="chevron">▼</span></div>
+              <div class="trouble-a">Close Arduino Serial Monitor — it holds the port exclusively. Only one program can use the serial port at a time.</div>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-q" onclick="toggleT(this)">DHT reading failed in Serial Monitor <span class="chevron">▼</span></div>
+              <div class="trouble-a">Make sure the sketch uses <code>#define DHT_TYPE DHT11</code>. Check the 10kΩ pull-up resistor on the DATA pin. VCC must be 5V.</div>
+            </div>
+            <div class="trouble-item">
+              <div class="trouble-q" onclick="toggleT(this)">pip is not recognised <span class="chevron">▼</span></div>
+              <div class="trouble-a">Python is not on your PATH. Download from python.org, tick "Add Python to PATH" during install, then restart your terminal.</div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let bridgeUrl    = localStorage.getItem('bridge_url') || 'http://localhost:8080';
+let pollInterval = parseInt(localStorage.getItem('poll_interval') || '3000');
+let threshMod    = parseInt(localStorage.getItem('thresh_mod') || '300');
+let threshPoor   = parseInt(localStorage.getItem('thresh_poor') || '600');
+let history      = [];
+let chartData    = [];
+let pollTimer    = null;
+let demoMode     = false;
+let demoTimer    = null;
+let theme        = localStorage.getItem('theme') || 'dark';
+
+// Safety state
+let soundOn         = localStorage.getItem('sound_on') === 'true';
+let lockoutEnabled  = localStorage.getItem('lockout_enabled') !== 'false';
+let panelEnabled    = localStorage.getItem('panel_enabled') !== 'false';
+let lockoutCooldown = parseInt(localStorage.getItem('lockout_cooldown') || '5'); // minutes
+let lastLockoutTime = 0;
+let lockoutTimer    = null;
+let lockoutCountdown= 30;
+let alertLog        = []; // {id, time, level, msg, aqVal, acked}
+let alertCount      = 0;
+let unackedAlerts   = 0;
+let sessionStart    = Date.now();
+let notifGranted    = false;
+let audioCtx        = null;
+let currentAlertLevel = null; // 'danger'|'warning'|null
+
+// Chart
+let chartCanvas, chartCtx;
+const CHART_MAX = 60;
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  setTheme(theme);
+  chartCanvas = document.getElementById('chart');
+  chartCtx    = chartCanvas.getContext('2d');
+  resizeChart();
+  window.addEventListener('resize', resizeChart);
+  document.getElementById('bridgeUrl').value = bridgeUrl;
+  document.getElementById('lockoutCooldown').value = lockoutCooldown;
+  syncToggleUI();
+  startPolling();
+  setInterval(updateUptimeStat, 30000);
+});
+
+function syncToggleUI() {
+  setToggle('ts-sound', soundOn);
+  setToggle('ts-notif', notifGranted);
+  setToggle('ts-lockout', lockoutEnabled);
+  setToggle('ts-panel', panelEnabled);
+  document.getElementById('soundBtn').classList.toggle('on', soundOn);
+  document.getElementById('soundBtn').textContent = soundOn ? '🔊' : '🔇';
+}
+function setToggle(id, on) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('on', on);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// POLLING — UNTOUCHED DATA TRANSFER
+// ═══════════════════════════════════════════════════════════════
+function startPolling() {
+  stopPolling();
+  demoMode = false;
+  setStatus('searching', 'Connecting to bridge…', 'http://localhost:8080/data');
+  fetchData();
+  pollTimer = setInterval(fetchData, pollInterval);
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+async function fetchData() {
+  if (demoMode) return;
+  try {
+    const res = await fetch(bridgeUrl + '/data', { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    if (!d.connected && !d.temp) throw new Error('not connected');
+    document.getElementById('offlineCard').classList.remove('visible');
+    document.getElementById('cardsGrid').style.display = '';
+    document.getElementById('statsStrip').style.display = '';
+    document.getElementById('lastUpd').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    setStatus('connected', 'Live — Arduino connected via USB', 'localhost:8080');
+    applyReading(d);
+  } catch(e) {
+    setStatus('offline', 'Bridge not running', 'localhost:8080');
+    document.getElementById('offlineCard').classList.add('visible');
+    document.getElementById('cardsGrid').style.display = 'none';
+    document.getElementById('statsStrip').style.display = 'none';
+    hideAlert();
+    hideSafetyPanel();
+    document.getElementById('lastUpd').textContent = 'Failed ' + new Date().toLocaleTimeString();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APPLY READING — UNTOUCHED CORE + SAFETY HOOKS ADDED AFTER
+// ═══════════════════════════════════════════════════════════════
+function applyReading(d) {
+  const { temp, humidity, airQuality, ledState } = d;
+  if (temp === null || temp === undefined) return;
+
+  document.getElementById('cardTemp').innerHTML = parseFloat(temp).toFixed(1) + '<span class="card-unit">°C</span>';
+  document.getElementById('cardTempF').textContent = (temp * 9/5 + 32).toFixed(1) + '°F';
+
+  document.getElementById('cardHum').innerHTML = parseFloat(humidity).toFixed(1) + '<span class="card-unit">%</span>';
+  const humDesc = humidity < 30 ? 'Low humidity' : humidity > 70 ? 'High humidity' : 'Comfortable';
+  document.getElementById('cardHumSub').textContent = humDesc;
+
+  document.getElementById('cardAQ').textContent = airQuality;
+  const aql = getAQLabel(airQuality);
+  document.getElementById('cardAQLabel').textContent = aql.text + ' — raw ADC';
+
+  const badge = document.getElementById('ledBadge');
+  badge.className = 'led-badge ' + (ledState || 'green');
+  document.getElementById('ledLabel').textContent = (ledState || '—').toUpperCase();
+  const descs = {green:'Normal — air quality good.',yellow:'Caution — ventilate soon.',red:'DANGER — ventilate immediately!'};
+  document.getElementById('ledSub').textContent = descs[ledState] || '';
+
+  // ── card glow ──
+  ['card-temp','card-hum','card-aq','card-alert'].forEach(id => {
+    const c = document.getElementById(id);
+    c.classList.remove('danger-glow','warn-glow');
+  });
+  if (ledState === 'red' || aql.level === 'poor') {
+    document.getElementById('card-aq').classList.add('danger-glow');
+    document.getElementById('card-alert').classList.add('danger-glow');
+  } else if (ledState === 'yellow' || aql.level === 'moderate') {
+    document.getElementById('card-aq').classList.add('warn-glow');
+    document.getElementById('card-alert').classList.add('warn-glow');
+  }
+
+  // ── inline alert + safety features ──
+  if (ledState === 'red' || aql.level === 'poor') {
+    showAlert('danger','🚨 Air quality POOR — ventilate immediately!');
+    fireSafetyAlert('danger', airQuality);
+  } else if (ledState === 'yellow' || aql.level === 'moderate') {
+    showAlert('warning','⚠️ Air quality moderate — consider ventilating.');
+    fireSafetyAlert('warning', airQuality);
+  } else {
+    hideAlert();
+    hideSafetyPanel();
+    currentAlertLevel = null;
+  }
+
+  const entry = {
+    time: new Date().toLocaleTimeString(),
+    temp: parseFloat(temp).toFixed(2),
+    humidity: parseFloat(humidity).toFixed(2),
+    airQuality, aqLabel: aql.text, aqLevel: aql.level, ledState
+  };
+  history.unshift(entry);
+  if (history.length > 200) history.pop();
+  chartData.push({ temp: parseFloat(temp), humidity: parseFloat(humidity), airQuality });
+  if (chartData.length > CHART_MAX) chartData.shift();
+
+  renderTable();
+  drawChart();
+  drawSparklines();
+  updateStats();
+  document.getElementById('readingCount').textContent = history.length + ' readings';
+}
+
+function getAQLabel(v) {
+  if (v >= threshPoor) return { text:'Poor', level:'poor' };
+  if (v >= threshMod)  return { text:'Moderate', level:'moderate' };
+  return { text:'Good', level:'good' };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAFETY: ALERT FIRING
+// ═══════════════════════════════════════════════════════════════
+function fireSafetyAlert(level, aqVal) {
+  // Don't re-fire same level
+  if (currentAlertLevel === level) return;
+  currentAlertLevel = level;
+
+  const now = Date.now();
+  const msg = level === 'danger'
+    ? `Air quality DANGER — MQ135 reading: ${aqVal}`
+    : `Air quality MODERATE warning — MQ135 reading: ${aqVal}`;
+
+  // Log the alert
+  logAlert(level, msg, aqVal);
+
+  // Sound
+  if (soundOn) playAlertSound(level);
+
+  // Browser notification
+  if (notifGranted && Notification.permission === 'granted') {
+    new Notification('AirNode Alert', {
+      body: msg,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="26" font-size="28">🌿</text></svg>'
+    });
+  }
+
+  // Safety panel
+  if (panelEnabled) showSafetyPanel();
+
+  // Lockout overlay (danger only, with cooldown)
+  if (level === 'danger' && lockoutEnabled) {
+    if (now - lastLockoutTime > lockoutCooldown * 60 * 1000) {
+      lastLockoutTime = now;
+      showLockout(msg);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAFETY: LOCKOUT OVERLAY
+// ═══════════════════════════════════════════════════════════════
+function showLockout(msg) {
+  document.getElementById('lockoutMsg').textContent = msg + ' — Confirm all safety steps before dismissing.';
+  ['lc1','lc2','lc3','lc4'].forEach(id => { const el = document.getElementById(id); if(el) el.checked = false; });
+  document.getElementById('lockoutAckBtn').disabled = true;
+  document.getElementById('lockoutBanner').classList.add('show');
+  lockoutCountdown = 30;
+  document.getElementById('lockoutCountdown').textContent = lockoutCountdown;
+  if (lockoutTimer) clearInterval(lockoutTimer);
+  lockoutTimer = setInterval(() => {
+    lockoutCountdown--;
+    const el = document.getElementById('lockoutCountdown');
+    if (el) el.textContent = lockoutCountdown;
+    if (lockoutCountdown <= 0) {
+      clearInterval(lockoutTimer);
+      dismissLockout(false);
+    }
+  }, 1000);
+}
+
+function dismissLockout(acknowledged) {
+  if (lockoutTimer) { clearInterval(lockoutTimer); lockoutTimer = null; }
+  document.getElementById('lockoutBanner').classList.remove('show');
+  if (acknowledged) {
+    logAlert('ack', 'Safety lockout acknowledged — all steps confirmed.', null);
+    resetSafetyActions();
+  }
+}
+
+function updateLockoutBtn() {
+  const all = ['lc1','lc2','lc3','lc4'].every(id => document.getElementById(id)?.checked);
+  document.getElementById('lockoutAckBtn').disabled = !all;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAFETY: INLINE ALERT ACTIONS
+// ═══════════════════════════════════════════════════════════════
+function acknowledgeAlert() {
+  // Marks current inline alert acknowledged — panel stays but banner color muted
+  const b = document.getElementById('alertBanner');
+  b.style.opacity = '.5';
+  logAlert('ack', 'Alert acknowledged by user.', null);
+  unackedAlerts = Math.max(0, unackedAlerts - 1);
+  refreshAlertBadge();
+}
+
+function triggerSOS() {
+  const aqVal = history.length ? history[0].airQuality : '—';
+  showLockout(`SOS triggered manually — last air quality reading: ${aqVal}`);
+}
+
+function showAlert(type, msg) {
+  const b = document.getElementById('alertBanner');
+  b.style.opacity = '';
+  b.className = 'alert-banner ' + type;
+  document.getElementById('alertIcon').textContent = type === 'danger' ? '🚨' : '⚠️';
+  document.getElementById('alertMsg').textContent = msg;
+  b.style.display = 'flex';
+}
+function hideAlert() {
+  document.getElementById('alertBanner').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAFETY: ACTION PANEL
+// ═══════════════════════════════════════════════════════════════
+function showSafetyPanel() {
+  document.getElementById('safetyPanel').classList.add('show');
+}
+function hideSafetyPanel() {
+  document.getElementById('safetyPanel').classList.remove('show');
+}
+function safetyAction(btn, action) {
+  const pressed = btn.classList.toggle('pressed');
+  btn.querySelector('.sab-state').textContent = pressed ? '✓ Done' : 'Not done';
+}
+function resetSafetyActions() {
+  document.querySelectorAll('.safety-action-btn').forEach(btn => {
+    btn.classList.remove('pressed');
+    const s = btn.querySelector('.sab-state');
+    if (s && s.textContent !== 'clear all') s.textContent = 'Not done';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ALERT LOG
+// ═══════════════════════════════════════════════════════════════
+function logAlert(level, msg, aqVal) {
+  const entry = { id: Date.now(), time: new Date().toLocaleTimeString(), level, msg, aqVal, acked: level === 'ack' };
+  alertLog.unshift(entry);
+  if (alertLog.length > 200) alertLog.pop();
+  if (level !== 'ack') {
+    alertCount++;
+    unackedAlerts++;
+    document.getElementById('alertTotalCount').textContent = alertCount;
+    document.getElementById('statAlerts').textContent = alertCount;
+  }
+  refreshAlertBadge();
+  renderAlertLog();
+}
+
+function refreshAlertBadge() {
+  const badge = document.getElementById('alertLogBadge');
+  const dot = document.getElementById('notifDot');
+  if (unackedAlerts > 0) {
+    badge.style.display = '';
+    badge.textContent = unackedAlerts;
+    if (dot) dot.classList.add('show');
+  } else {
+    badge.style.display = 'none';
+    if (dot) dot.classList.remove('show');
+  }
+}
+
+function renderAlertLog() {
+  const list = document.getElementById('alertLogList');
+  document.getElementById('alertLogTotal').textContent = alertLog.length + ' alerts';
+  if (!alertLog.length) { list.innerHTML = '<div class="empty-state">No alerts fired yet.</div>'; return; }
+  list.innerHTML = alertLog.map(a => {
+    const icons = { danger:'🚨', warning:'⚠️', ack:'✅' };
+    const cls = a.acked ? 'ali-level-ack' : a.level === 'danger' ? 'ali-level-danger' : a.level === 'warning' ? 'ali-level-warning' : '';
+    return `<div class="alert-log-item">
+      <span class="ali-icon">${icons[a.level]||'ℹ️'}</span>
+      <span class="ali-msg ${cls}">${a.msg}${a.aqVal !== null && a.aqVal !== undefined ? ' <span style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">[AQ:${a.aqVal}]</span>' : ''}</span>
+      <span class="ali-time">${a.time}</span>
+    </div>`;
+  }).join('');
+}
+
+function clearAlertLog() {
+  if (!confirm('Clear alert log?')) return;
+  alertLog = []; unackedAlerts = 0;
+  refreshAlertBadge(); renderAlertLog();
+}
+function markAllAcked() {
+  alertLog.forEach(a => a.acked = true);
+  unackedAlerts = 0;
+  refreshAlertBadge(); renderAlertLog();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SOUND
+// ═══════════════════════════════════════════════════════════════
+function toggleSound() {
+  soundOn = !soundOn;
+  localStorage.setItem('sound_on', soundOn);
+  syncToggleUI();
+  if (soundOn) playAlertSound('warning'); // test beep
+}
+function toggleSoundSetting() {
+  soundOn = !soundOn;
+  localStorage.setItem('sound_on', soundOn);
+  syncToggleUI();
+}
+
+function playAlertSound(level) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const beeps = level === 'danger' ? [880, 0, 880, 0, 880] : [660];
+    let t = audioCtx.currentTime;
+    beeps.forEach(freq => {
+      if (!freq) { t += 0.1; return; }
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'square';
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      osc.start(t); osc.stop(t + 0.18);
+      t += 0.22;
+    });
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BROWSER NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════
+function requestNotifs() {
+  if (!('Notification' in window)) { alert('Browser notifications not supported.'); return; }
+  Notification.requestPermission().then(p => {
+    notifGranted = p === 'granted';
+    localStorage.setItem('notif_granted', notifGranted);
+    setToggle('ts-notif', notifGranted);
+    document.getElementById('notifBtn').classList.toggle('on', notifGranted);
+    if (notifGranted) new Notification('AirNode', { body: 'Notifications enabled!' });
+    else alert('Notification permission denied. Please allow notifications in your browser settings.');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SETTINGS TOGGLES
+// ═══════════════════════════════════════════════════════════════
+function toggleLockoutSetting() {
+  lockoutEnabled = !lockoutEnabled;
+  localStorage.setItem('lockout_enabled', lockoutEnabled);
+  setToggle('ts-lockout', lockoutEnabled);
+}
+function togglePanelSetting() {
+  panelEnabled = !panelEnabled;
+  localStorage.setItem('panel_enabled', panelEnabled);
+  setToggle('ts-panel', panelEnabled);
+}
+function testAlert() {
+  fireSafetyAlert('danger', 999);
+  showAlert('danger', '🚨 TEST ALERT — This is a test of the safety system.');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATS + SPARKLINES
+// ═══════════════════════════════════════════════════════════════
+function updateStats() {
+  if (!history.length) return;
+  const temps = history.map(r => parseFloat(r.temp));
+  const hums  = history.map(r => parseFloat(r.humidity));
+  const aqs   = history.map(r => parseFloat(r.airQuality));
+  const mn = arr => Math.min(...arr).toFixed(1);
+  const mx = arr => Math.max(...arr).toFixed(1);
+  const av = arr => (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1);
+  document.getElementById('statTempMin').textContent = mn(temps)+'°C';
+  document.getElementById('statTempMax').textContent = mx(temps)+'°C';
+  document.getElementById('statTempAvg').textContent = av(temps)+'°C';
+  document.getElementById('statHumMin').textContent  = mn(hums)+'%';
+  document.getElementById('statHumMax').textContent  = mx(hums)+'%';
+  document.getElementById('statHumAvg').textContent  = av(hums)+'%';
+  document.getElementById('statAQMin').textContent   = mn(aqs);
+  document.getElementById('statAQMax').textContent   = mx(aqs);
+  document.getElementById('statAQAvg').textContent   = av(aqs);
+  document.getElementById('statReadings').textContent= history.length;
+}
+function updateUptimeStat() {
+  const mins = Math.floor((Date.now() - sessionStart) / 60000);
+  const el = document.getElementById('statUptime');
+  if (el) el.textContent = mins >= 60 ? (mins/60).toFixed(1)+'h' : mins+'m';
+}
+
+function drawSparklines() {
+  if (!chartData.length) return;
+  const data = chartData.slice(-20);
+  drawSparkline('sparkTemp', data.map(d=>d.temp), '#0ea5e9');
+  drawSparkline('sparkHum',  data.map(d=>d.humidity), '#22c55e');
+  drawSparkline('sparkAQ',   data.map(d=>d.airQuality), '#f97316');
+}
+function drawSparkline(id, data, color) {
+  const c = document.getElementById(id);
+  if (!c || data.length < 2) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.parentElement.getBoundingClientRect().width;
+  c.width = w * dpr; c.height = 34 * dpr;
+  c.style.width = w + 'px'; c.style.height = '34px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const mn = Math.min(...data), mx = Math.max(...data), rng = mx - mn || 1;
+  const W = w, H = 34, pad = 2;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  data.forEach((v,i) => {
+    const x = pad + (i / (data.length-1)) * (W - pad*2);
+    const y = H - pad - ((v - mn) / rng) * (H - pad*2);
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  ctx.globalAlpha = .12; ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(pad, H - pad);
+  data.forEach((v,i) => { const x = pad + (i/(data.length-1))*(W-pad*2); const y = H-pad-((v-mn)/rng)*(H-pad*2); ctx.lineTo(x,y); });
+  ctx.lineTo(W-pad, H-pad); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATUS / DEMO / TABLE / CHART — ORIGINAL LOGIC PRESERVED
+// ═══════════════════════════════════════════════════════════════
+function setStatus(state, label, sub) {
+  document.getElementById('usbDot').className = 'usb-dot ' + state;
+  document.getElementById('usbLabel').textContent = label;
+  document.getElementById('usbSub').textContent = sub;
+}
+
+function enableDemo() {
+  demoMode = true; stopPolling();
+  document.getElementById('offlineCard').classList.remove('visible');
+  document.getElementById('cardsGrid').style.display = '';
+  document.getElementById('statsStrip').style.display = '';
+  setStatus('connected', 'Demo mode (simulated data)', 'offline');
+  function gen() {
+    const t  = 22 + Math.sin(Date.now()/20000)*4 + (Math.random()-.5);
+    const h  = 55 + Math.sin(Date.now()/15000)*12 + (Math.random()-.5)*3;
+    const aq = Math.floor(200 + Math.abs(Math.sin(Date.now()/8000))*500 + Math.random()*60);
+    const ls = aq >= threshPoor ? 'red' : aq >= threshMod ? 'yellow' : 'green';
+    applyReading({ temp:t, humidity:h, airQuality:aq, ledState:ls, connected:true });
+  }
+  gen();
+  demoTimer = setInterval(gen, pollInterval);
+}
+
+function renderTable() {
+  const tbody = document.getElementById('historyBody');
+  if (!history.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No readings yet.</td></tr>'; return; }
+  tbody.innerHTML = history.slice(0,50).map(r => {
+    const cls = {good:'quality-good',moderate:'quality-moderate',poor:'quality-poor'}[r.aqLevel]||'';
+    const lc  = r.ledState==='red'?'color:var(--red)':r.ledState==='yellow'?'color:var(--yellow)':'color:var(--green)';
+    return `<tr>
+      <td style="font-family:var(--font-mono);font-size:12px">${r.time}</td>
+      <td>${r.temp}</td><td>${r.humidity}</td><td>${r.airQuality}</td>
+      <td><span class="quality-chip ${cls}">${r.aqLabel}</span></td>
+      <td style="${lc};font-weight:600;font-size:12px">${(r.ledState||'').toUpperCase()}</td>
+    </tr>`;
+  }).join('');
+}
+
+function resizeChart() {
+  if (!chartCanvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = chartCanvas.parentElement.getBoundingClientRect().width;
+  chartCanvas.width  = w * dpr;
+  chartCanvas.height = 220 * dpr;
+  chartCanvas.style.width  = w + 'px';
+  chartCanvas.style.height = '220px';
+  chartCtx = chartCanvas.getContext('2d');
+  chartCtx.scale(dpr, dpr);
+  drawChart();
+}
+
+function drawChart() {
+  if (!chartCtx || chartData.length < 2) {
+    const e = document.getElementById('chartEmpty'); if (e) e.style.display = 'block'; return;
+  }
+  document.getElementById('chartEmpty').style.display = 'none';
+  const dpr = window.devicePixelRatio || 1;
+  const W = chartCanvas.width / dpr, H = chartCanvas.height / dpr;
+  const pad = { top:16, right:16, bottom:28, left:44 };
+  const iW = W - pad.left - pad.right, iH = H - pad.top - pad.bottom;
+  const ctx = chartCtx;
+  ctx.clearRect(0,0,W,H);
+  const temps = chartData.map(d=>d.temp);
+  const hums  = chartData.map(d=>d.humidity);
+  const aqs   = chartData.map(d=>d.airQuality);
+  function sy(v,mn,mx){ return pad.top + iH - ((v-mn)/(mx-mn||1))*iH; }
+  function sx(i){ return pad.left + (i/(Math.max(chartData.length-1,1)))*iW; }
+  function rng(arr){ const mn=Math.min(...arr),mx=Math.max(...arr),p=(mx-mn)*.15||5; return [mn-p,mx+p]; }
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){ const y=pad.top+(i/4)*iH; ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(W-pad.right,y);ctx.stroke(); }
+  function line(data,mn,mx,color){
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath();
+    data.forEach((v,i)=>{ const x=sx(i),y=sy(v,mn,mx); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.stroke();
+    ctx.globalAlpha=.07; ctx.fillStyle=color;
+    ctx.beginPath(); ctx.moveTo(sx(0),pad.top+iH);
+    data.forEach((v,i)=>ctx.lineTo(sx(i),sy(v,mn,mx)));
+    ctx.lineTo(sx(data.length-1),pad.top+iH); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  const [tMn,tMx]=rng(temps),[hMn,hMx]=rng(hums),[aMn,aMx]=rng(aqs);
+  line(aqs,aMn,aMx,'#f97316');
+  line(hums,hMn,hMx,'#22c55e');
+  line(temps,tMn,tMx,'#0ea5e9');
+  ctx.fillStyle='#7d8590'; ctx.font='11px system-ui'; ctx.textAlign='right';
+  for(let i=0;i<=4;i++){ const v=tMn+(tMx-tMn)*(1-i/4); ctx.fillText(v.toFixed(1),pad.left-6,pad.top+(i/4)*iH+4); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAV / SETTINGS / THEME / EXPORT — ORIGINAL PRESERVED
+// ═══════════════════════════════════════════════════════════════
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (name==='dashboard') setTimeout(resizeChart,50);
+}
+
+function applySettings() {
+  const bu = document.getElementById('bridgeUrl').value.trim();
+  const ni = parseInt(document.getElementById('settingsInterval').value);
+  const tm = parseInt(document.getElementById('threshModerate').value);
+  const tp = parseInt(document.getElementById('threshPoor').value);
+  const lc = parseInt(document.getElementById('lockoutCooldown').value);
+  if (bu) { bridgeUrl = bu; localStorage.setItem('bridge_url', bu); }
+  if (!isNaN(ni)) { pollInterval = ni; localStorage.setItem('poll_interval', ni); }
+  if (!isNaN(tm)) { threshMod = tm; localStorage.setItem('thresh_mod', tm); }
+  if (!isNaN(tp)) { threshPoor = tp; localStorage.setItem('thresh_poor', tp); }
+  if (!isNaN(lc)) { lockoutCooldown = lc; localStorage.setItem('lockout_cooldown', lc); }
+  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+  startPolling();
+  alert('Settings saved!');
+}
+
+function toggleTheme() { setTheme(theme==='dark'?'light':'dark'); }
+function setTheme(t) {
+  theme = t;
+  document.body.classList.toggle('light', t==='light');
+  document.getElementById('themeBtn').textContent = t==='dark'?'☀':'🌙';
+  localStorage.setItem('theme', t);
+  setTimeout(drawChart,50);
+  const sel=document.getElementById('settingsTheme'); if(sel) sel.value=t;
+}
+
+function exportCSV() {
+  if (!history.length) { alert('No data yet.'); return; }
+  const rows = [...history].reverse().map(r=>`${r.time},${r.temp},${r.humidity},${r.airQuality},${r.aqLabel},${r.ledState}`).join('\n');
+  const blob = new Blob(['Time,Temp(C),Humidity(%),AirQuality,Quality,Alert\n'+rows],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'airnode_'+new Date().toISOString().slice(0,19).replace(/:/g,'-')+'.csv';
+  a.click();
+}
+
+function clearHistory() {
+  if (!confirm('Clear all data?')) return;
+  history=[]; chartData=[];
+  renderTable(); drawChart();
+  document.getElementById('readingCount').textContent='0 readings';
+}
+
+function toggleT(el) {
+  const a = el.nextElementSibling;
+  const open = a.classList.contains('open');
+  document.querySelectorAll('.trouble-a').forEach(x=>x.classList.remove('open'));
+  document.querySelectorAll('.trouble-q').forEach(x=>x.classList.remove('open'));
+  if (!open) { a.classList.add('open'); el.classList.add('open'); }
+}
+
+function copyText(txt) {
+  navigator.clipboard.writeText(txt).catch(()=>{});
+}
+</script>
+</body>
+</html>
